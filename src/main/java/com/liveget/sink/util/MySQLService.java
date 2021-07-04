@@ -24,8 +24,9 @@ public class MySQLService {
         // This will load the MySQL driver, each DB has its own driver
         Class.forName("com.mysql.cj.jdbc.Driver");
         // Setup the connection with the DB
-        connect = DriverManager.getConnection("jdbc:mysql://" + host + ":" + port + "/" +
-                database + "user=" + username + "&password=" + password);
+        connect = DriverManager.getConnection("jdbc:mysql://" + host + ":" + port + "/" + database +
+                "?user=" + username + "&password=" + password +
+                "&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC");
     }
 
     public static MySQLService getInstance(String host, String port, String database, String username, String password) throws SQLException, ClassNotFoundException {
@@ -97,24 +98,24 @@ public class MySQLService {
     }
 
     public static Boolean checkExistsKafkaSinkTaskProgress(String topic) throws SQLException {
-        String sql = "select count(*) as record_size from %s where topic = '%s' ;";
+        String sql = "select count(*) as record_count from %s where topic = '%s' ;";
         ResultSet result = getSQLQueryResult(String.format(sql, kafkaSinkTaskProgressTableName, topic));
         int size = 0;
         if(result != null) {
-            result.last();
-            size = Integer.valueOf(result.getRow());
+            result.next();
+            size = result.getInt("record_count");
             return size > 0;
         }
         return false;
     }
 
     public static Boolean checkExistsKafkaSinkTableFact(String topic) throws SQLException {
-        String sql = "select count(*) as record_size from %s where topic = '%s' and table_name = '%s';";
+        String sql = "select count(*) as record_count from %s where topic = '%s' and table_name = '%s';";
         ResultSet result = getSQLQueryResult(String.format(sql, kafkaSinkTableFactTableName, topic, insertTableName));
         int size = 0;
         if(result != null) {
-            result.last();
-            size = Integer.valueOf(result.getRow());
+            result.next();
+            size = result.getInt("record_count");
             return size > 0;
         }
         return false;
@@ -122,21 +123,21 @@ public class MySQLService {
 
 
     public static void updateKafkaSinkTaskProgress(String topic, String createDateStr, String createDateTimeStr) throws SQLException {
-        // kafka_sink_task_progress: topic, kafka_head_date, batch_head_date, batch_head_time, kafka_start_date, create_time, update_time
-        String sql = "update %s set kafka_head_date = '%s', kafka_head_date = '%s', update_time = '%s' where topic = '%s';";
-        executeSQLStatement(String.format(sql, kafkaSinkTaskProgressTableName, createDateStr, createDateTimeStr, topic));
+        // kafka_sink_task_progress: topic, kafka_head_date, batch_head_date, batch_head_datetime, kafka_start_date, create_datetime, update_datetime
+        String sql = "update %s set kafka_head_date = '%s', kafka_start_date = '%s', update_datetime = '%s' where topic = '%s';";
+        executeSQLStatement(String.format(sql, kafkaSinkTaskProgressTableName, createDateStr, createDateStr, createDateTimeStr, topic));
     }
 
 
     public static void insertKafkaSinkTaskProgress(String topic, String createDateStr, String createDateTimeStr) throws SQLException {
-        // kafka_sink_task_progress: topic, kafka_head_date, batch_head_date, batch_head_time, kafka_start_date, create_time, update_time
-        String sql = "insert into %s (topic, kafka_head_date, kafka_start_date, create_time) values( '%s', '%s', '%s', '%s');";
-        executeSQLStatement(String.format(sql, topic, createDateStr, createDateStr, createDateTimeStr));
+        // kafka_sink_task_progress: topic, kafka_head_date, batch_head_date, batch_head_datetime, kafka_start_date, create_datetime, update_datetime
+        String sql = "insert into %s (topic, kafka_head_date, kafka_start_date, create_datetime) values( '%s', '%s', '%s', '%s');";
+        executeSQLStatement(String.format(sql, kafkaSinkTaskProgressTableName, topic, createDateStr, createDateStr, createDateTimeStr));
     }
 
-    public static void insertKafkaSinkTableFact(String topic, String createTimeStr) throws SQLException {
-        String sql = "insert into %s (topic, table_name, create_time) values( '%s', '%s', '%s');";
-        executeSQLStatement(String.format(sql, topic, kafkaSinkTableFactTableName, createTimeStr));
+    public static void insertKafkaSinkTableFact(String topic, String createDateTimeStr) throws SQLException {
+        String sql = "insert into %s (topic, table_name, create_datetime) values( '%s', '%s', '%s');";
+        executeSQLStatement(String.format(sql, kafkaSinkTableFactTableName, topic, insertTableName, createDateTimeStr));
     }
 
     public static void executeSQLStatement(String sql) throws SQLException {

@@ -4,11 +4,11 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
-import com.liveget.sink.parser.EventTopic;
-import com.liveget.sink.parser.EventType;
-import com.liveget.sink.parser.Execution;
+import com.liveget.sink.parser.*;
+import com.liveget.sink.util.ClassLoaderUtils;
 import com.liveget.sink.util.DateTimeUtils;
 import com.liveget.sink.util.MySQLService;
 import org.apache.log4j.Logger;
@@ -16,8 +16,6 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-
-import org.apache.log4j.Logger;
 
 public class LiveSink {
 
@@ -36,6 +34,7 @@ public class LiveSink {
     private static final Duration interval = Duration.ofMillis(1000);
     private static MySQLService dbService = null;
     private static String topic = null;
+    private static String brokerName = null;
 
 
     /*
@@ -52,12 +51,16 @@ public class LiveSink {
         configProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         // this group_id has to be <topic>_sink, so when restart the sink, it can continue to consume from the last time where it failed
         configProperties.put(ConsumerConfig.GROUP_ID_CONFIG, System.getenv("SINK_GROUP_ID"));
+        configProperties.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, System.getenv("FETCH_MIN_BYTES_CONFIG"));
+        configProperties.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, System.getenv("FETCH_MAX_WAIT_MS_CONFIG"));
+
         consumer = new KafkaConsumer<>(configProperties);
         List<String> topicList = new ArrayList<>();
         // only 1 topic is allowed here
         topic = System.getenv("TOPIC");
         topicList.add(topic);
         consumer.subscribe(topicList);
+        brokerName = System.getenv("BROKER_NAME");
 
 
         // instanciate MySQLService
@@ -79,8 +82,10 @@ public class LiveSink {
     /*
     run LiveSink
     */
-    private static void run() throws IOException, GeneralSecurityException {
+    private static void run() throws Exception {
         try {
+            Execution.getInstance();
+            DateTimeUtils.getInstance().setCurrentTime(Instant.now());
             while(true) {
                 ConsumerRecords records = consumer.poll(interval);
                 for (Object record : records) {
@@ -101,7 +106,7 @@ public class LiveSink {
                         // 1.3 check kafka_sink_task_progress table, insert or update the table if necessary
                         processKafkaSinkTaskProgressTable();
                         // 1.4 check kafka_sink_table_fact table, insert a record if necessary
-
+                        processKafkaSinkTableFactTable();
                         // 1.5 create kafka ingestion table if necessary
                         dbService.setCreateSinkTableStatement(Execution.getCreateSinkTableStatement());
                         dbService.executeSQLStatement(dbService.getCreateSinkTableStatement());
@@ -119,7 +124,7 @@ public class LiveSink {
                 consumer.commitAsync();
             }
         } catch (Exception e) {
-            logger.error(e.getStackTrace());
+            e.printStackTrace();
         } finally {
             consumer.close();
             System.out.println("Closed consumer gracefully!");
@@ -130,10 +135,10 @@ public class LiveSink {
         // 1. check if record exists
         if (dbService.checkExistsKafkaSinkTaskProgress(topic)) {
             // if exists, update the progres
-            dbService.updateKafkaSinkTaskProgress(topic, DateTimeUtils.getCurrDateString(), DateTimeUtils.getCurrDateTimeString());
+            dbService.updateKafkaSinkTaskProgress(topic, currentDateStr, DateTimeUtils.getCurrDateTimeString());
         } else {
             // if not exists, insert a record
-            dbService.insertKafkaSinkTaskProgress(topic, DateTimeUtils.getCurrDateString(), DateTimeUtils.getCurrDateTimeString());
+            dbService.insertKafkaSinkTaskProgress(topic, currentDateStr, DateTimeUtils.getCurrDateTimeString());
         }
     }
 
@@ -141,7 +146,7 @@ public class LiveSink {
         // check if record exists
         if(!dbService.checkExistsKafkaSinkTableFact(topic)) {
             // if not exists, insert one record to the table
-            dbService.insertKafkaSinkTableFact(topic, DateTimeUtils.getCurrDateString());
+            dbService.insertKafkaSinkTableFact(topic, DateTimeUtils.getCurrDateTimeString());
         }
     }
 
@@ -151,6 +156,9 @@ public class LiveSink {
         String ret = DateTimeUtils.getCurrDateString();
         switch(eventType) {
             case PRICING:
+                Pricing pricing = ClassLoaderUtils.instantiatePricingClassByName(brokerName);
+                Execution.setPricing(pricing);
+
                 Execution.getPricing().setRecord(msg.value().toString());
                 ret = Execution.getPricing().getSendDateStr();
                 if(dbService.getInsertStatementHead() == null) {
@@ -161,6 +169,8 @@ public class LiveSink {
                 }
                 break;
             case SIGNAL:
+                Signal signal = ClassLoaderUtils.instantiateSignalClassByName(brokerName);
+                Execution.setSignal(signal);
                 Execution.getSignal().setRecord(msg.value().toString());
                 ret = Execution.getSignal().getIdentifiedDateStr();
 
@@ -177,7 +187,7 @@ public class LiveSink {
         return ret;
     }
 
-    public static void main(String [] args) throws SQLException, ClassNotFoundException, IOException, GeneralSecurityException {
+    public static void main(String [] args) throws Exception {
         LiveSink.getInstance().run();
     }
 
