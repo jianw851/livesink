@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: livesink-configmap
+data:
+  BOOTSTRAP_SERVERS_CONFIG: "10.110.218.133:9092"
+  FETCH_MIN_BYTES_CONFIG: "2048"
+  FETCH_MAX_WAIT_MS_CONFIG: "10000"
+  DBHOST: "10.103.129.116"
+  DBPORT: "3306"
+  DATABASE: "livesink"
+  KAFKA_SINK_TASK_PROGRESS_TABLE_NAME: "kafka_sink_task_progress"
+  KAFKA_SINK_TABLE_FACT_TABLE_NAME: "kafka_sink_table_fact"

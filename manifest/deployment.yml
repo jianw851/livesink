@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: livesink-1-1-2-eurusd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: livesink
+  template:
+    metadata:
+      labels:
+        app: livesink
+    spec:
+      containers:
+        - name: livesink
+          image: liveget/livesink:0.0.2
+          imagePullPolicy: Always
+          envFrom:
+          - secretRef:
+              name: livesink-dw-credential
+          - configMapRef:
+              name: livesink-configmap
+          env:
+            - name: TOPIC
+              value: "1-1-2-EUR_USD"
+            - name: SINK_GROUP_ID 
+              value: "1-1-2-EUR_USD_SINK"
+            - name: BROKER_NAME
+              value: "OANDA"
+      imagePullSecrets:
+        - name: regcred
+
