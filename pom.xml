@@ -35,7 +35,7 @@
                         <manifest>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>LiveSink</mainClass>
+                            <mainClass>com.liveget.sink.LiveSink</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>
